@@ -1,0 +1,80 @@
+import pandas as pd
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Load the dataset
+df = pd.read_csv('flight_data.csv')
+
+# Feature Engineering
+# Creating features from existing data
+df['departure_hour'] = pd.to_datetime(df['Scheduled_Departure']).dt.hour
+df['departure_day'] = pd.to_datetime(df['Scheduled_Departure']).dt.dayofweek
+df['is_weekend'] = df['departure_day'].apply(lambda x: 1 if x >= 5 else 0)
+
+# Select relevant features and target variable
+features = ['departure_hour', 'Distance', 'Weather_Condition', 'Air_Traffic_Volume', 'is_weekend']
+target = 'Flight_Delayed'
+
+X = df[features]
+y = df[target]
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Model training using XGBoost
+xgb_model = xgb.XGBClassifier(n_estimators=100, learning_rate=0.1, max_depth=5)
+xgb_model.fit(X_train, y_train)
+
+# Make predictions on the test set
+y_pred = xgb_model.predict(X_test)
+
+# Evaluate the model
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy:.2f}")
+
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+print("Classification Report:")
+print(classification_report(y_test, y_pred))
+
+# Feature importance visualization
+importance = xgb_model.feature_importances_
+fig = px.bar(x=features, y=importance, title='Feature Importance')
+fig.show()
+
+# Interactive dashboard for prediction visualization
+def predict_flight_delay(input_data):
+    input_df = pd.DataFrame([input_data], columns=features)
+    prediction = xgb_model.predict(input_df)
+    
+    return 'Delayed' if prediction[0] == 1 else 'On Time'
+
+# Example input
+input_example = {
+    'departure_hour': 10,
+    'Distance': 800,
+    'Weather_Condition': 2,  # Example: 0 = Clear, 1 = Cloudy, 2 = Rainy
+    'Air_Traffic_Volume': 300,
+    'is_weekend': 0
+}
+
+# Make a prediction for the input
+result = predict_flight_delay(input_example)
+print(f"Predicted flight status: {result}")
+
+# Visualize the prediction on a gauge chart
+gauge_fig = go.Figure(go.Indicator(
+    mode="gauge+number",
+    value=1 if result == 'Delayed' else 0,
+    title={'text': "Flight Delay Prediction"},
+    gauge={'axis': {'range': [0, 1]},
+           'steps': [
+               {'range': [0, 0.5], 'color': "green"},
+               {'range': [0.5, 1], 'color': "red"}]
+           }))
+
+gauge_fig.show()
